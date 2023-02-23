@@ -5,9 +5,7 @@ const dotenv = require("dotenv");
 const mongoose = require('mongoose');
 const Job = require('./models/Job');
 const { generateFile } = require('./generateFile');
-const { executeCpp } = require('./executeCpp');
-const { executePy } = require('./executePy');
-
+const { addJobToQueue } = require('./jobQueue');
 
 dotenv.config();
 app.use(cors());
@@ -54,31 +52,14 @@ app.post('/run', async (req, res) => {
         //we need to run the file and send the response
         job = await new Job({ language, filePath }).save();
         const jobID = job["_id"];
+        addJobToQueue(jobID);
         console.log(jobID);
         res.status(201).json({ success: true, jobID });
-
-        let output;
-
-        job["startedAt"] = new Date();
-        if (language === "cpp") {
-            output = await executeCpp(filePath);
-        } else {
-            output = await executePy(filePath);
-        }
-
-        job["completedAt"] = new Date();
-        job["status"] = "success";
-        job["output"] = output;
-
-        await job.save();
-        console.log(job);
     } catch (error) {
-        job["completedAt"] = new Date();
-        job["status"] = "error";
-        job["output"] = JSON.stringify(error);
-
-        await job.save();
-        console.log(job);
+        return res.status(500).json({
+            success: false,
+            error: JSON.stringify(error)
+        });
     }
 });
 
@@ -101,7 +82,7 @@ app.get("/status", async (req, res) => {
                 error: "Invalid Job ID"
             });
         }
-        return res.status(200).json(job);
+        return res.status(200).json({ success: true, job });
     } catch (error) {
         return res.status(400).json({
             success: false,
